@@ -134,7 +134,7 @@ export default function Console({ initialTickets }: { initialTickets: TicketWith
         </div>
       </div>
 
-      {selected && <TicketPanel t={selected} onClose={() => setSelectedId(null)} />}
+      {selected && <TicketPanel key={selected.id} t={selected} onClose={() => setSelectedId(null)} />}
     </div>
   )
 }
@@ -152,6 +152,7 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
 
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [ok, setOk] = useState<string | null>(null)
   const [redispatchMode, setRedispatchMode] = useState<string | null>(null)
   const [refundMode, setRefundMode] = useState<string | null>(null)
   const [refundKind, setRefundKind] = useState('coupon')
@@ -165,15 +166,16 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
   const stageMeta = curStage ? STAGE_ACTION[curStage] : null
   const isAwaiting = t.ticket_status === 'awaiting_information'
 
-  async function call(path: string, body: Record<string, unknown>) {
-    setBusy(true); setMsg(null)
+  async function call(path: string, body: Record<string, unknown>, okMsg?: string) {
+    setBusy(true); setMsg(null); setOk(null)
     try {
       const res = await fetch(`/api/complaints/${t.id}/${path}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!data.ok) { setMsg(data.reason || 'Action failed'); setBusy(false); return false }
-      router.refresh() // re-fetch server data so the panel reflects the new state
+      if (okMsg) setOk(okMsg)
+      router.refresh()
       setBusy(false); return true
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Request failed'); setBusy(false); return false
@@ -198,6 +200,7 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
         </div>
 
         {msg && <div className="mx-5 mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">{msg}</div>}
+        {ok && <div className="mx-5 mt-3 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-800">{ok}</div>}
 
         <div className="p-5 space-y-4">
           {/* PART 1 */}
@@ -348,8 +351,12 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
                     {stagePanel ? (
                       <StageCapture meta={stageMeta} stageKey={curStage} busy={busy}
                         onDone={async (note, extra) => {
-                          const ok = await call('advance', { to: nextStage(curStage), completing: curStage, action_type: curStage, action_by: 'human', notes: note, ...extra })
-                          if (ok) setStagePanel(false)
+                          // file_claim stage also pings the n8n claim webhook
+                          if (curStage === 'file_claim') {
+                            await call('file-claim', { note }, 'Claim filed — sent to n8n.')
+                          }
+                          const okAdv = await call('advance', { to: nextStage(curStage), completing: curStage, action_type: curStage, action_by: 'human', notes: note, ...extra })
+                          if (okAdv) setStagePanel(false)
                         }} onCancel={() => setStagePanel(false)} />
                     ) : (
                       <button onClick={() => setStagePanel(true)} className="rounded-lg bg-emerald-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-emerald-700">{stageMeta.label}</button>
@@ -359,8 +366,8 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
 
                 {/* secondary / resolve actions */}
                 <div className="flex flex-wrap gap-2">
-                  {isDelay && !isAwaiting && <button disabled={busy} onClick={() => call('escalate', { courier: courierName })} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:opacity-50">Escalate to courier</button>}
-                  {isDelay && <button disabled={busy} onClick={() => call('action', { action_type: 'reverify_sms_sent', action_by: 'human', channel: 'sms', notes: 'Sent reverify-address SMS' })} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:opacity-50">Reverify Address</button>}
+                  {isDelay && !isAwaiting && <button disabled={busy} onClick={() => call('escalate-courier', {}, 'Escalated to courier — sent to n8n.')} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:opacity-50">Escalate to courier</button>}
+                  {isDelay && <button disabled={busy} onClick={() => call('reverify-address', {}, 'Reverify link sent — n8n will message the customer.')} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:opacity-50">Reverify Address</button>}
                   {!isDNR && <button onClick={() => setRedispatchMode('choose')} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50">Redispatch</button>}
                   <button onClick={() => { setRefundMode('choose'); if (t.damaged_value) setRefundAmt(String(t.damaged_value)) }} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50">Refund</button>
                   <button onClick={() => setResolveMode(true)} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50">Resolve &amp; Close</button>
@@ -371,21 +378,19 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
                   <div className="rounded-lg border border-gray-200 p-3 text-sm">
                     <div className="font-medium mb-2">Whose fault is the failed delivery?</div>
                     <div className="flex gap-2">
-                      <button disabled={busy} onClick={async () => { if (await call('redispatch', { fault_attribution: 'courier', delivery_row_id: deliveries[0]?.id })) setRedispatchMode('courier') }} className="flex-1 rounded-lg border border-gray-300 px-3 py-2 hover:bg-gray-50"><div className="font-medium">Courier fault</div><div className="text-xs text-gray-500">Free reship</div></button>
+                      <button disabled={busy} onClick={async () => { if (await call('redispatch', { fault_attribution: 'courier', delivery_row_id: deliveries[0]?.id }, 'Reship created — free (courier fault).')) setRedispatchMode('courier') }} className="flex-1 rounded-lg border border-gray-300 px-3 py-2 hover:bg-gray-50"><div className="font-medium">Courier fault</div><div className="text-xs text-gray-500">Free reship</div></button>
                       <button onClick={() => setRedispatchMode('customer')} className="flex-1 rounded-lg border border-gray-300 px-3 py-2 hover:bg-gray-50"><div className="font-medium">Customer fault</div><div className="text-xs text-gray-500">Charge redelivery fee</div></button>
                     </div>
                     <button onClick={() => setRedispatchMode(null)} className="mt-2 text-xs text-gray-500">Cancel</button>
                   </div>
                 )}
-                {redispatchMode === 'courier' && <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">✓ Redispatch logged — free reship (courier fault).</div>}
                 {redispatchMode === 'customer' && (
                   <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm">
                     <div className="font-medium text-blue-800">Send redelivery payment link</div>
                     <div className="text-xs text-blue-700 mt-1">Reship is created once the customer pays. (Razorpay — wired later.)</div>
-                    <button disabled={busy} onClick={async () => { if (await call('action', { action_type: 'fee_charged', action_by: 'human', channel: 'sms', notes: 'Sent redelivery payment link' })) setRedispatchMode('sent') }} className="mt-2 rounded bg-blue-600 text-white px-3 py-1 text-xs font-medium disabled:opacity-50">Send payment link</button>
+                    <button disabled={busy} onClick={async () => { if (await call('action', { action_type: 'fee_charged', action_by: 'human', channel: 'sms', notes: 'Sent redelivery payment link' }, 'Payment link sent — awaiting payment.')) setRedispatchMode('sent') }} className="mt-2 rounded bg-blue-600 text-white px-3 py-1 text-xs font-medium disabled:opacity-50">Send payment link</button>
                   </div>
                 )}
-                {redispatchMode === 'sent' && <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">✓ Payment link sent — awaiting payment, then reship.</div>}
 
                 {/* refund flow */}
                 {refundMode === 'choose' && (
@@ -395,22 +400,21 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
                       <button onClick={() => setRefundKind('coupon')} className={`flex-1 rounded-lg border px-3 py-2 ${refundKind === 'coupon' ? 'border-emerald-400 bg-emerald-50' : 'border-gray-300'}`}>Coupon</button>
                       <button onClick={() => setRefundKind('cash')} className={`flex-1 rounded-lg border px-3 py-2 ${refundKind === 'cash' ? 'border-emerald-400 bg-emerald-50' : 'border-gray-300'}`}>Cash / amount</button>
                     </div>
-                    <input value={refundAmt} onChange={(e) => setRefundAmt(e.target.value)} placeholder="Amount (₹)" className="w-full rounded border border-gray-300 px-2 py-1.5" />
+                    <input type="number" min="0" step="0.01" inputMode="decimal" value={refundAmt} onChange={(e) => setRefundAmt(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="Amount (₹)" className="w-full rounded border border-gray-300 px-2 py-1.5" />
                     <div className="flex gap-2">
-                      <button disabled={busy} onClick={async () => { if (await call('action', { action_type: 'refund_requested', action_by: 'human', notes: `${refundKind === 'coupon' ? 'Coupon' : 'Cash'} refund ₹${refundAmt || '—'} — pending 2nd-level approval` })) setRefundMode('requested') }} className="rounded bg-emerald-600 text-white px-3 py-1.5 text-xs font-medium disabled:opacity-50">Submit request</button>
+                      <button disabled={busy} onClick={async () => { if (await call('action', { action_type: 'refund_requested', action_by: 'human', notes: `${refundKind === 'coupon' ? 'Coupon' : 'Cash'} refund ₹${refundAmt || '—'} — pending 2nd-level approval` }, 'Refund request logged — pending approval.')) setRefundMode('requested') }} className="rounded bg-emerald-600 text-white px-3 py-1.5 text-xs font-medium disabled:opacity-50">Submit request</button>
                       <button onClick={() => setRefundMode(null)} className="text-xs text-gray-500">Cancel</button>
                     </div>
                     <div className="text-xs text-gray-400">Does not refund directly — flags for second-level verification.</div>
                   </div>
                 )}
-                {refundMode === 'requested' && <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">✓ Refund requested ({refundKind}, ₹{refundAmt || '—'}) — pending approval.</div>}
 
                 {/* resolve & close flow */}
                 {resolveMode && (
                   <div className="rounded-lg border border-gray-200 p-3 text-sm space-y-2">
                     <div className="font-medium">Resolve &amp; close — no redispatch or refund</div>
                     <ResolvePicker busy={busy} onPick={async (method, note) => {
-                      if (await call('close', { resolution_method: method, resolved_by: 'human', resolution_notes: note })) setResolveMode(false)
+                      if (await call('close', { resolution_method: method, resolved_by: 'human', resolution_notes: note }, 'Ticket closed.')) setResolveMode(false)
                     }} onCancel={() => setResolveMode(false)} />
                   </div>
                 )}
@@ -438,8 +442,8 @@ function StageCapture({ meta, busy, onDone, onCancel }: { meta: { label: string;
       <div className="space-y-2 text-sm">
         <div className="text-xs text-gray-600">Review the video, then record how many units are damaged and their value (feeds the refund / coupon amount).</div>
         <div className="flex gap-2">
-          <input value={qty} onChange={(e) => setQty(e.target.value)} placeholder="Units damaged" className="w-32 rounded border border-gray-300 px-2 py-1.5" />
-          <input value={val} onChange={(e) => setVal(e.target.value)} placeholder="Value (₹)" className="w-32 rounded border border-gray-300 px-2 py-1.5" />
+          <input type="number" min="0" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value.replace(/[^0-9]/g, ''))} placeholder="Units damaged" className="w-32 rounded border border-gray-300 px-2 py-1.5" />
+          <input type="number" min="0" step="0.01" inputMode="decimal" value={val} onChange={(e) => setVal(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="Value (₹)" className="w-32 rounded border border-gray-300 px-2 py-1.5" />
         </div>
         <div className="flex gap-2">
           <button disabled={busy} onClick={() => onDone(`${qty || '?'} unit(s) damaged · ₹${val || '?'}`, { damaged_qty: qty ? Number(qty) : null, damaged_value: val ? Number(val) : null })} className="rounded bg-emerald-600 text-white px-3 py-1.5 text-xs font-medium disabled:opacity-50">Save</button>
