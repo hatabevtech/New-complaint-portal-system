@@ -96,7 +96,7 @@ export async function listTickets(): Promise<TicketWithExtras[]> {
   const rows = (tickets ?? []) as TicketRow[]
   if (rows.length === 0) return []
 
-  // deliveries for all tickets (one query)
+// deliveries for all tickets (one query)
   const ids = rows.map((t) => t.id)
   const { data: deliveries } = await cdb(supabase)
     .from(CTBL.deliveries)
@@ -109,6 +109,19 @@ export async function listTickets(): Promise<TicketWithExtras[]> {
     delByTicket.set(d.ticket_id, arr)
   }
 
+  // actions for all tickets (one query), newest first
+  const { data: actions } = await cdb(supabase)
+    .from(CTBL.actions)
+    .select('*')
+    .in('ticket_id', ids)
+    .order('created_at', { ascending: false })
+  const actByTicket = new Map<string, ActionRow[]>()
+  for (const a of (actions ?? []) as ActionRow[]) {
+    const arr = actByTicket.get(a.ticket_id) ?? []
+    arr.push(a)
+    actByTicket.set(a.ticket_id, arr)
+  }
+
   // order facts from public.orders (join on order_id = orders.id)
   const orderIds = Array.from(new Set(rows.map((t) => t.order_id)))
   const facts = await fetchOrderFacts(supabase, orderIds)
@@ -117,6 +130,7 @@ export async function listTickets(): Promise<TicketWithExtras[]> {
     ...t,
     order: facts.get(String(t.order_id)),
     deliveries: delByTicket.get(t.id) ?? [],
+    actions: actByTicket.get(t.id) ?? [],
   }))
 }
 
