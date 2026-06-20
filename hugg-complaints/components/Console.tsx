@@ -368,15 +368,15 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
 
                 {/* redispatch flow */}
                 {redispatchMode === 'choose' && (
-                  <div className="rounded-lg border border-gray-200 p-3 text-sm">
-                    <div className="font-medium mb-2">Whose fault is the failed delivery?</div>
-                    <div className="flex gap-2">
-                      <button disabled={busy} onClick={async () => { if (await call('action', { action_type: 'redispatch_created', action_by: 'human', notes: 'Free reship — courier fault' })) setRedispatchMode('courier') }} className="flex-1 rounded-lg border border-gray-300 px-3 py-2 hover:bg-gray-50"><div className="font-medium">Courier fault</div><div className="text-xs text-gray-500">Free reship</div></button>
-                      <button onClick={() => setRedispatchMode('customer')} className="flex-1 rounded-lg border border-gray-300 px-3 py-2 hover:bg-gray-50"><div className="font-medium">Customer fault</div><div className="text-xs text-gray-500">Charge redelivery fee</div></button>
-                    </div>
-                    <button onClick={() => setRedispatchMode(null)} className="mt-2 text-xs text-gray-500">Cancel</button>
-                  </div>
-                )}
+  <div className="rounded-lg border border-gray-200 p-3 text-sm">
+    <div className="font-medium mb-2">Whose fault is the failed delivery?</div>
+    <div className="flex gap-2">
+      <button disabled={busy} onClick={async () => { if (await call('action', { action_type: 'redispatch_created', action_by: 'human', notes: 'Free reship — courier fault' })) setRedispatchMode('courier') }} className="flex-1 rounded-lg border border-gray-300 px-3 py-2 hover:bg-gray-50"><div className="font-medium">Courier fault</div><div className="text-xs text-gray-500">Free reship</div></button>
+      <button onClick={() => setRedispatchMode('customer')} className="flex-1 rounded-lg border border-gray-300 px-3 py-2 hover:bg-gray-50"><div className="font-medium">Customer fault</div><div className="text-xs text-gray-500">Charge redelivery fee</div></button>
+    </div>
+    <button onClick={() => setRedispatchMode(null)} className="mt-2 text-xs text-gray-500">Cancel</button>
+  </div>
+)}}
                 {redispatchMode === 'courier' && <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">✓ Redispatch logged — free reship (courier fault).</div>}
                 {redispatchMode === 'customer' && (
                   <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm">
