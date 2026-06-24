@@ -23,16 +23,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (tErr || !ticket) return NextResponse.json({ ok: false, reason: 'ticket not found' }, { status: 404 })
 
   // 2. all public.delivery parcels for that order (the real shipping record)
+  // select * so a missing optional column never breaks the route;
+  // we read fields defensively below.
   const { data: pubDeliveries, error: dErr } = await supabase
     .from('delivery')
-    .select(`
-      id, order_id, delivery_reference, parcel_number, sku, product_name, quantity,
-      delivery_status, assigned_courier, tracking_id, tracking_number, tracking_link, barcode,
-      shipping_address, shipping_city, shipping_state, shipping_postcode,
-      customer_name, customer_phone, customer_email,
-      date_shipped, shipped_from_warehouse_at, label_generated, label_cancelled,
-      is_redispatch, redispatch_of
-    `)
+    .select('*')
     .eq('order_id', ticket.order_id)
     .order('parcel_number', { ascending: true })
   if (dErr) return NextResponse.json({ ok: false, reason: dErr.message }, { status: 422 })
