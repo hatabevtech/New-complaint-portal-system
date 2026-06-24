@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import type { TicketWithExtras } from '@/lib/data'
+import RedispatchModal, { type ParcelForRedispatch } from './RedispatchModal'
 
 // ── pipeline config (display) ──
 const PIPELINES: Record<string, string[]> = {
@@ -153,7 +154,25 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
-  const [redispatchMode, setRedispatchMode] = useState<string | null>(null)
+  // new modal-driven redispatch
+  const [redispatchParcels, setRedispatchParcels] = useState<ParcelForRedispatch[] | null>(null)
+  const [redispatchParcel, setRedispatchParcel] = useState<ParcelForRedispatch | null>(null)
+  const [loadingParcels, setLoadingParcels] = useState(false)
+
+  async function openRedispatch() {
+    setLoadingParcels(true); setMsg(null)
+    try {
+      const res = await fetch(`/api/complaints/${t.id}/deliveries`)
+      const data = await res.json()
+      if (!data.ok) { setMsg(data.reason || 'Could not load delivery records'); setLoadingParcels(false); return }
+      const parcels = (data.deliveries ?? []) as ParcelForRedispatch[]
+      if (parcels.length === 0) { setMsg('No shipping records found for this order — cannot redispatch.'); setLoadingParcels(false); return }
+      if (parcels.length === 1) { setRedispatchParcel(parcels[0]) }   // single parcel → straight to modal
+      else { setRedispatchParcels(parcels) }                          // multiple → show picker
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Failed to load deliveries')
+    } finally { setLoadingParcels(false) }
+  }
   const [refundMode, setRefundMode] = useState<string | null>(null)
   const [refundKind, setRefundKind] = useState('coupon')
   const [refundAmt, setRefundAmt] = useState(t.damaged_value != null ? String(t.damaged_value) : '')
@@ -368,29 +387,13 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
                 <div className="flex flex-wrap gap-2">
                   {isDelay && !isAwaiting && <button disabled={busy} onClick={() => call('escalate-courier', {}, 'Escalated to courier — sent to n8n.')} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:opacity-50">Escalate to courier</button>}
                   {isDelay && <button disabled={busy} onClick={() => call('reverify-address', {}, 'Reverify link sent — n8n will message the customer.')} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:opacity-50">Reverify Address</button>}
-                  {!isDNR && <button onClick={() => setRedispatchMode('choose')} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50">Redispatch</button>}
+                  {!isDNR && <button disabled={loadingParcels} onClick={openRedispatch} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:opacity-50">{loadingParcels ? 'Loading…' : 'Redispatch'}</button>}
                   <button onClick={() => { setRefundMode('choose'); if (t.damaged_value) setRefundAmt(String(t.damaged_value)) }} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50">Refund</button>
                   <button onClick={() => setResolveMode(true)} className="rounded-lg px-3 py-1.5 text-sm font-medium border bg-white text-gray-700 border-gray-300 hover:bg-gray-50">Resolve &amp; Close</button>
                 </div>
 
-                {/* redispatch flow */}
-                {redispatchMode === 'choose' && (
-                  <div className="rounded-lg border border-gray-200 p-3 text-sm">
-                    <div className="font-medium mb-2">Whose fault is the failed delivery?</div>
-                    <div className="flex gap-2">
-                      <button disabled={busy} onClick={async () => { if (await call('redispatch', { fault_attribution: 'courier', delivery_row_id: deliveries[0]?.id }, 'Reship created — free (courier fault).')) setRedispatchMode('courier') }} className="flex-1 rounded-lg border border-gray-300 px-3 py-2 hover:bg-gray-50"><div className="font-medium">Courier fault</div><div className="text-xs text-gray-500">Free reship</div></button>
-                      <button onClick={() => setRedispatchMode('customer')} className="flex-1 rounded-lg border border-gray-300 px-3 py-2 hover:bg-gray-50"><div className="font-medium">Customer fault</div><div className="text-xs text-gray-500">Charge redelivery fee</div></button>
-                    </div>
-                    <button onClick={() => setRedispatchMode(null)} className="mt-2 text-xs text-gray-500">Cancel</button>
-                  </div>
-                )}
-                {redispatchMode === 'customer' && (
-                  <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm">
-                    <div className="font-medium text-blue-800">Send redelivery payment link</div>
-                    <div className="text-xs text-blue-700 mt-1">Reship is created once the customer pays. (Razorpay — wired later.)</div>
-                    <button disabled={busy} onClick={async () => { if (await call('action', { action_type: 'fee_charged', action_by: 'human', channel: 'sms', notes: 'Sent redelivery payment link' }, 'Payment link sent — awaiting payment.')) setRedispatchMode('sent') }} className="mt-2 rounded bg-blue-600 text-white px-3 py-1 text-xs font-medium disabled:opacity-50">Send payment link</button>
-                  </div>
-                )}
+                {/* redispatch is now handled by RedispatchModal (opened via openRedispatch) */}
+
 
                 {/* refund flow */}
                 {refundMode === 'choose' && (
@@ -427,6 +430,36 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
           <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm hover:bg-gray-50">Close</button>
         </div>
       </div>
+
+      {/* multi-parcel picker — only when an order has several parcels */}
+      {redispatchParcels && (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 p-4 overflow-y-auto" onClick={() => setRedispatchParcels(null)}>
+          <div className="w-full max-w-lg my-6 rounded-xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-100 font-semibold">Which parcel to redispatch?</div>
+            <div className="p-4 space-y-2">
+              {redispatchParcels.map((p) => (
+                <button key={p.id} onClick={() => { setRedispatchParcel(p); setRedispatchParcels(null) }} className="w-full text-left rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50">
+                  <div className="text-sm font-medium">{p.product_name || p.sku || p.delivery_reference}</div>
+                  <div className="text-xs text-gray-500 font-mono">{p.delivery_reference} · {p.assigned_courier ?? 'India Post'} · {p.tracking_identifier || 'no tracking'} · {p.delivery_status || '—'}</div>
+                </button>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setRedispatchParcels(null)} className="text-sm text-gray-500">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* the redispatch edit-then-reship modal */}
+      {redispatchParcel && (
+        <RedispatchModal
+          ticketId={t.id}
+          parcel={redispatchParcel}
+          onClose={() => setRedispatchParcel(null)}
+          onDone={(m) => { setRedispatchParcel(null); setOk(m); router.refresh() }}
+        />
+      )}
     </div>
   )
 }
