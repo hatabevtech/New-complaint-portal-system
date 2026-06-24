@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-// Read-only client (anon key) — respects RLS. Used for reads.
+// Session client (anon key + cookies) — reads the logged-in user. Respects RLS.
 export async function createClient() {
   const cookieStore = await cookies()
   return createServerClient(
@@ -18,7 +18,7 @@ export async function createClient() {
   )
 }
 
-// Admin client (service role) — bypasses RLS. Used for the write routes only.
+// Admin client (service role) — bypasses RLS. Used by the write/data routes only.
 export function createAdminClient() {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
