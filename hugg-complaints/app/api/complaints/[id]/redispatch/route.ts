@@ -72,20 +72,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   p_updates.last_edited_by = 'operator'
 
   // ── 3. Create the real reship on public.delivery ─────────────────────────
-  const { data: newDel, error: rpcErr } = await supabase
+  const { data: rpcResult, error: rpcErr } = await supabase
     .rpc('create_redispatch_delivery', { p_original_delivery_id: originalPublicId, p_updates })
     .single() as { data: RedispatchDelivery | null; error: { message: string } | null }
 
-  if (rpcErr || !newDel) {
+  if (rpcErr || !rpcResult) {
     return NextResponse.json({ ok: false, reason: rpcErr?.message || 'reship RPC failed' }, { status: 422 })
   }
+  let newDel: RedispatchDelivery = rpcResult
 
-  // Apply the courier explicitly if it was edited (RPC may not set it).
+
+  // Apply the courier explicitly if it was edited, then RE-FETCH so the
+  // webhook payload reflects exactly what is in the DB (no stale value).
   if ('assigned_courier' in p_updates) {
     await supabase.from('delivery')
       .update({ assigned_courier: p_updates.assigned_courier as string | null, updated_at: new Date().toISOString() })
       .eq('id', newDel.id)
-    newDel.assigned_courier = p_updates.assigned_courier as string | null
+    const { data: fresh } = await supabase.from('delivery').select('*').eq('id', newDel.id).single()
+    if (fresh) newDel = fresh as RedispatchDelivery
   }
 
   // ── 4. Mirror into complaints.deliveries for the operator timeline ───────
