@@ -1,5 +1,8 @@
 import type { Metadata } from 'next'
+import { Outfit } from 'next/font/google'
 import './globals.css'
+
+const outfit = Outfit({ subsets: ['latin'], display: 'swap' })
 
 export const metadata: Metadata = {
   title: 'Hugg Complaints',
@@ -8,8 +11,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body style={{ fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif' }}>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* apply saved theme before paint to avoid a flash */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('hugg-theme');if(t==='dark')document.documentElement.classList.add('dark');}catch(e){}})();` }} />
+      </head>
+      <body className={outfit.className}>{children}</body>
     </html>
   )
 }
