@@ -31,6 +31,9 @@ export interface ParcelForRedispatch {
   shipping_state?: string | null
   shipping_postcode?: string | null
   complaint_delivery_row_id?: string | null
+  complaint_status?: string | null
+  complaint_status_message?: string | null
+  complaint_edd?: string | null
 }
 
 export default function RedispatchModal({
