@@ -40,8 +40,8 @@ export interface TicketRow {
   shipping_state: string | null
   shipping_postcode: string | null
   updated_address: string | null
+  assigned_rep_name: string | null
   created_at: string
-  closed_at: string | null
 }
 
 export interface DeliveryRow {
