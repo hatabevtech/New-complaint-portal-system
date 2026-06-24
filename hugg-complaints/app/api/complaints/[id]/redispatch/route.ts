@@ -68,8 +68,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   for (const k of EDITABLE) {
     if (k in edits && edits[k] !== undefined) p_updates[k] = edits[k]
   }
-  // India Post is stored as null courier; UI sends 'India Post' → null.
-  if (p_updates.assigned_courier === 'India Post') p_updates.assigned_courier = null
+  // India Post is stored as the literal string 'IndiaPost' (not null) in this DB.
   p_updates.last_edited_by = 'operator'
 
   // ── 3. Create the real reship on public.delivery ─────────────────────────
@@ -107,7 +106,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (fault) ticketUpdate.fault_attribution = fault
   await cdb(supabase).from(CTBL.tickets).update(ticketUpdate).eq('id', id)
 
-  const courierDisplay = newDel.assigned_courier || 'India Post'
+  const courierDisplay = newDel.assigned_courier || 'IndiaPost'
   const addressChanged = ['shipping_address', 'shipping_city', 'shipping_postcode'].some(k => k in p_updates)
   await recordAction(supabase, id, {
     action_type: 'redispatch_created',
