@@ -1,10 +1,21 @@
-// app/page.tsx — server component: fetch tickets, render the console.
+// app/page.tsx — server component: auth-gate (logistics + super_admin only),
+// then fetch tickets and render the console exactly as before.
 import { listTickets, type TicketWithExtras } from '@/lib/data'
 import Console from '@/components/Console'
+import { createClient } from '@/lib/supabase/server'
+import { canAccessComplaints } from '@/lib/auth-utils'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic' // always fetch fresh from DB
 
 export default async function Page() {
+  // ── Auth gate: only logistics + super_admin may enter ──────────────────
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/auth/login')
+  if (!canAccessComplaints(user)) redirect('/auth/login?denied=1')
+
+  // ── Data (unchanged) ───────────────────────────────────────────────────
   let tickets: TicketWithExtras[] = []
   let error: string | null = null
   try {
