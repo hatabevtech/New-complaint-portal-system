@@ -13,7 +13,7 @@
 // ============================================================
 import React, { useState } from 'react'
 
-const COURIERS = ['Amazon', 'BlueDart', 'Mahavir', 'India Post'] as const
+const COURIERS = ['Amazon', 'BlueDart', 'Mahavir', 'IndiaPost'] as const
 
 export interface ParcelForRedispatch {
   id: string                       // public.delivery id
@@ -45,7 +45,7 @@ export default function RedispatchModal({
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const courierInit = parcel.assigned_courier == null ? 'India Post' : parcel.assigned_courier
+  const courierInit = parcel.assigned_courier == null ? 'IndiaPost' : parcel.assigned_courier
   const [form, setForm] = useState({
     customer_name:     parcel.customer_name     ?? '',
     customer_phone:    parcel.customer_phone    ?? '',
@@ -135,7 +135,7 @@ export default function RedispatchModal({
               <div><div className={lbl}>Product</div><div className="font-medium">{parcel.product_name || '—'}</div></div>
               <div><div className={lbl}>SKU</div><div className="font-mono">{parcel.sku || '—'}</div></div>
               <div><div className={lbl}>Original tracking</div><div className="font-mono">{parcel.tracking_identifier || '—'}</div></div>
-              <div><div className={lbl}>Current courier</div><div>{parcel.assigned_courier ?? 'India Post'}</div></div>
+              <div><div className={lbl}>Current courier</div><div>{parcel.assigned_courier ?? 'IndiaPost'}</div></div>
               <div><div className={lbl}>Status</div><div>{parcel.delivery_status || '—'}</div></div>
               <div><div className={lbl}>Fault</div><div className="capitalize">{fault}</div></div>
             </div>
