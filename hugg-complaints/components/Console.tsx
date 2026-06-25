@@ -582,11 +582,13 @@ function DeliveryRecords({ deliveries, loading, sub, card }: { deliveries: Parce
       {deliveries.map((d) => {
         const tracking = d.tracking_identifier
         const isReship = (d.delivery_reference || '').includes('R')
+        const isComplained = !!d.complaint_delivery_row_id
         return (
-          <div key={d.id} className={`${card} p-3 text-sm`}>
+          <div key={d.id} className={`${card} p-3 text-sm ${isComplained ? 'border-[rgb(85,185,131)] ring-1 ring-[rgb(85,185,131)]/30' : 'opacity-60'}`}>
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium">{d.product_name || d.sku} {d.sku && <span className="text-gray-400">· {d.sku}</span>}</span>
               <div className="flex items-center gap-1.5">
+                {isComplained && <Pill className="bg-[rgb(85,185,131)] text-white border-[rgb(85,185,131)]">complaint</Pill>}
                 {isReship && <Pill className="bg-[rgb(85,185,131)]/15 text-[rgb(85,185,131)] border-[rgb(85,185,131)]/30">redispatch</Pill>}
                 <Pill className="bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">{(d.delivery_status || d.complaint_status || '—').replace(/_/g, ' ')}</Pill>
               </div>
