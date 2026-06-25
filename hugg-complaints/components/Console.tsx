@@ -100,6 +100,7 @@ export default function Console({ initialTickets }: { initialTickets: TicketWith
   const [typeFilter, setTypeFilter] = useState('all')
   const [repFilter, setRepFilter] = useState('all')
   const [courierFilter, setCourierFilter] = useState('all')
+  const [formFilter, setFormFilter] = useState('all')
   const [sortBy, setSortBy] = useState<'urgent' | 'newest'>('urgent')
   const tickets = initialTickets
 
@@ -123,6 +124,12 @@ export default function Console({ initialTickets }: { initialTickets: TicketWith
     if (typeFilter !== 'all') rows = rows.filter((t) => t.complaint_type === typeFilter)
     if (repFilter !== 'all') rows = rows.filter((t) => (t.assigned_rep_name || '') === (repFilter === 'unassigned' ? '' : repFilter))
     if (courierFilter !== 'all') rows = rows.filter((t) => (t.deliveries?.[0]?.courier || '') === courierFilter)
+    if (formFilter !== 'all') {
+      rows = rows.filter((t) => {
+        const submitted = !!(t as unknown as { submitted_at?: string | null }).submitted_at
+        return formFilter === 'submitted' ? submitted : !submitted
+      })
+    }
     if (query.trim()) {
       const q = query.toLowerCase()
       rows = rows.filter((t) => t.ticket_number.toLowerCase().includes(q) || String(t.order_id).includes(q) || (t.order?.customer_name || '').toLowerCase().includes(q))
@@ -142,7 +149,7 @@ export default function Console({ initialTickets }: { initialTickets: TicketWith
       rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     }
     return rows
-  }, [tickets, filter, typeFilter, repFilter, courierFilter, query, sortBy])
+  }, [tickets, filter, typeFilter, repFilter, courierFilter, formFilter, query, sortBy])
 
   const selected = tickets.find((t) => t.id === selectedId) || null
 
@@ -192,6 +199,11 @@ export default function Console({ initialTickets }: { initialTickets: TicketWith
             <option value="BlueDart">BlueDart</option>
             <option value="Mahavir">Mahavir</option>
             <option value="IndiaPost">IndiaPost</option>
+          </select>
+          <select value={formFilter} onChange={(e) => setFormFilter(e.target.value)} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-2 text-sm">
+            <option value="all">Form: any</option>
+            <option value="submitted">Form submitted</option>
+            <option value="not_submitted">Not submitted</option>
           </select>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value as 'urgent' | 'newest')} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-2 text-sm">
             <option value="urgent">Sort: Urgent first</option>
