@@ -99,6 +99,7 @@ export default function Console({ initialTickets }: { initialTickets: TicketWith
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [repFilter, setRepFilter] = useState('all')
+  const [courierFilter, setCourierFilter] = useState('all')
   const [sortBy, setSortBy] = useState<'urgent' | 'newest'>('urgent')
   const tickets = initialTickets
 
@@ -121,6 +122,7 @@ export default function Console({ initialTickets }: { initialTickets: TicketWith
     else if (filter !== 'all') rows = rows.filter((t) => t.ticket_status === filter)
     if (typeFilter !== 'all') rows = rows.filter((t) => t.complaint_type === typeFilter)
     if (repFilter !== 'all') rows = rows.filter((t) => (t.assigned_rep_name || '') === (repFilter === 'unassigned' ? '' : repFilter))
+    if (courierFilter !== 'all') rows = rows.filter((t) => (t.deliveries?.[0]?.courier || '') === courierFilter)
     if (query.trim()) {
       const q = query.toLowerCase()
       rows = rows.filter((t) => t.ticket_number.toLowerCase().includes(q) || String(t.order_id).includes(q) || (t.order?.customer_name || '').toLowerCase().includes(q))
@@ -140,7 +142,7 @@ export default function Console({ initialTickets }: { initialTickets: TicketWith
       rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     }
     return rows
-  }, [tickets, filter, typeFilter, repFilter, query, sortBy])
+  }, [tickets, filter, typeFilter, repFilter, courierFilter, query, sortBy])
 
   const selected = tickets.find((t) => t.id === selectedId) || null
 
@@ -183,6 +185,13 @@ export default function Console({ initialTickets }: { initialTickets: TicketWith
             <option value="all">All reps</option>
             <option value="unassigned">Unassigned</option>
             {REPS.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <select value={courierFilter} onChange={(e) => setCourierFilter(e.target.value)} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-2 text-sm">
+            <option value="all">All couriers</option>
+            <option value="Amazon">Amazon</option>
+            <option value="BlueDart">BlueDart</option>
+            <option value="Mahavir">Mahavir</option>
+            <option value="IndiaPost">IndiaPost</option>
           </select>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value as 'urgent' | 'newest')} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-2 text-sm">
             <option value="urgent">Sort: Urgent first</option>
