@@ -42,16 +42,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (c.delivery_id) cmpByPublicId.set(String(c.delivery_id), c)
   }
 
-  // 4. merge: each public parcel + any complaint overlay (status_message, edd, is_redispatch)
+  // 4. merge: each public parcel + any complaint overlay (status_message, edd, tracking)
   const merged = (pubDeliveries ?? []).map((d: Record<string, unknown>) => {
     const overlay = cmpByPublicId.get(String(d.id))
+    const courier = d.assigned_courier as string | null
+    const usesBarcode = courier === 'Mahavir' || courier === 'IndiaPost' || courier == null
+    // tracking from public.delivery, courier-aware…
+    const pubTracking = usesBarcode
+      ? (d.barcode ?? null)
+      : (d.tracking_id ?? d.tracking_number ?? null)
+    // …falling back to the complaint row's stored tracking (IndiaPost barcode
+    // lives in complaints.deliveries.tracking_id by design).
+    const overlayTracking = (overlay?.tracking_id ?? overlay?.barcode ?? null) as string | null
     return {
       ...d,
-      // courier-aware tracking identifier: Mahavir / India Post (null) use barcode
-      tracking_identifier:
-        (d.assigned_courier === 'Mahavir' || d.assigned_courier == null)
-          ? (d.barcode ?? null)
-          : (d.tracking_id ?? d.tracking_number ?? null),
+      tracking_identifier: pubTracking ?? overlayTracking ?? null,
       complaint_status: overlay?.status ?? null,
       complaint_status_message: overlay?.status_message ?? null,
       complaint_edd: overlay?.edd ?? null,
