@@ -360,21 +360,53 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
               <Field label="Days open" value={ageLabel(t.created_at)} sub={t.awaiting_since ? 'awaiting response' : undefined} danger={daysSince(t.created_at) > 7} />
             </div>
 
-            {isDelay && (
+            {isDelay && (() => {
+              // form-submission verdict from the confirm flags
+              const tx = t as unknown as {
+                submitted_at?: string | null
+                address_confirmed?: boolean | null
+                pincode_confirmed?: boolean | null
+                phone_confirmed?: boolean | null
+                updated_pincode?: string | null
+                updated_phone?: string | null
+              }
+              const submitted = !!tx.submitted_at
+              const allConfirmed = tx.address_confirmed === true && tx.pincode_confirmed === true && tx.phone_confirmed === true
+              const corrections: string[] = []
+              if (tx.address_confirmed === false) corrections.push('address')
+              if (tx.pincode_confirmed === false) corrections.push('pincode')
+              if (tx.phone_confirmed === false) corrections.push('phone')
+              return (
               <div className="mt-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 p-3">
                 <div className={`text-[11px] uppercase tracking-wide ${sub} mb-1`}>Delivery address & phone</div>
-                {t.updated_address ? (
+
+                {submitted && allConfirmed && (
+                  <div className="mb-2 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 px-2.5 py-1.5 text-xs text-green-800 dark:text-green-300">
+                    ✓ Customer submitted the form — no changes, confirmed all details are correct.
+                  </div>
+                )}
+                {submitted && !allConfirmed && corrections.length > 0 && (
+                  <div className="mb-2 rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+                    ⚠ Customer corrected: {corrections.join(', ')}.
+                  </div>
+                )}
+
+                {/* show corrected values when present */}
+                {(t.updated_address || tx.updated_pincode || tx.updated_phone) ? (
                   <div className="space-y-1.5">
                     <div className="flex items-start gap-2 text-sm"><span className="text-xs text-gray-400 w-16 shrink-0 mt-0.5">Original</span><span className="text-gray-500 dark:text-gray-400 line-through">{t.shipping_address}, {t.shipping_city}, {t.shipping_state} {t.shipping_postcode}</span></div>
-                    <div className="flex items-start gap-2 text-sm"><span className="text-xs text-amber-600 dark:text-amber-400 w-16 shrink-0 mt-0.5 font-medium">Updated</span><span className="font-medium">{t.updated_address}</span></div>
-                    <div className="text-xs text-amber-600 dark:text-amber-400">⚠ Customer corrected the address — check whose error before redispatch.</div>
+                    {t.updated_address && <div className="flex items-start gap-2 text-sm"><span className="text-xs text-amber-600 dark:text-amber-400 w-16 shrink-0 mt-0.5 font-medium">Address</span><span className="font-medium">{t.updated_address}</span></div>}
+                    {tx.updated_pincode && <div className="flex items-start gap-2 text-sm"><span className="text-xs text-amber-600 dark:text-amber-400 w-16 shrink-0 mt-0.5 font-medium">Pincode</span><span className="font-medium">{tx.updated_pincode}</span></div>}
+                    {tx.updated_phone && <div className="flex items-start gap-2 text-sm"><span className="text-xs text-amber-600 dark:text-amber-400 w-16 shrink-0 mt-0.5 font-medium">Phone</span><span className="font-medium">{tx.updated_phone}</span></div>}
+                    <div className="text-xs text-amber-600 dark:text-amber-400">⚠ Check whose error before redispatch.</div>
                   </div>
                 ) : (
                   <div className="text-sm">{t.shipping_address}, {t.shipping_city}, {t.shipping_state} — {t.shipping_postcode}</div>
                 )}
                 {t.customer_phone && <div className="text-sm mt-1">📞 {t.customer_phone}</div>}
               </div>
-            )}
+              )
+            })()}
 
             <div className="mt-3 flex items-center gap-3 text-xs">
               <span className={sub}>Handled by</span>
@@ -405,19 +437,28 @@ function TicketPanel({ t, onClose }: { t: TicketWithExtras; onClose: () => void 
 
             <div className="mt-4 border-t border-gray-100 dark:border-gray-800 pt-3">
               <div className={`text-xs font-medium ${sub} mb-2`}>What&apos;s happened so far</div>
-              {actions.length === 0 ? <p className="text-xs text-gray-400">No actions logged yet.</p> : (
-                <ol className="space-y-2">
-                  {actions.map((a) => (
-                    <li key={a.id} className="flex items-start gap-2 text-xs">
-                      <span className={`mt-1 h-1.5 w-1.5 rounded-full shrink-0 ${a.action_by === 'human' ? 'bg-gray-800 dark:bg-gray-200' : 'bg-gray-400'}`} />
-                      <span className="text-gray-400 tabular-nums shrink-0 w-16">{fmtAgo(a.created_at)}</span>
-                      <span className="font-medium">{a.action_type.replace(/_/g, ' ')}</span>
-                      <span className="text-gray-400">· {a.action_by}</span>
-                      {a.notes && <span className={sub}>— {a.notes}</span>}
-                    </li>
-                  ))}
-                </ol>
-              )}
+              {(() => {
+                const subAt = (t as unknown as { submitted_at?: string | null }).submitted_at
+                // merge a synthetic "Form Submitted" entry (from submitted_at) into the timeline
+                type Row = { id: string; created_at: string; action_type: string; action_by: string; notes?: string | null; synthetic?: boolean }
+                const rows: Row[] = [...actions as Row[]]
+                if (subAt) rows.push({ id: 'form-submitted', created_at: subAt, action_type: 'form submitted', action_by: 'customer', notes: 'Customer submitted the NDR form', synthetic: true })
+                rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                if (rows.length === 0) return <p className="text-xs text-gray-400">No actions logged yet.</p>
+                return (
+                  <ol className="space-y-2">
+                    {rows.map((a) => (
+                      <li key={a.id} className="flex items-start gap-2 text-xs">
+                        <span className={`mt-1 h-1.5 w-1.5 rounded-full shrink-0 ${a.synthetic ? 'bg-[rgb(85,185,131)]' : a.action_by === 'human' ? 'bg-gray-800 dark:bg-gray-200' : 'bg-gray-400'}`} />
+                        <span className="text-gray-400 tabular-nums shrink-0 w-16">{fmtAgo(a.created_at)}</span>
+                        <span className={`font-medium ${a.synthetic ? 'text-[rgb(85,185,131)]' : ''}`}>{a.action_type.replace(/_/g, ' ')}</span>
+                        <span className="text-gray-400">· {a.action_by}</span>
+                        {a.notes && <span className={sub}>— {a.notes}</span>}
+                      </li>
+                    ))}
+                  </ol>
+                )
+              })()}
             </div>
           </Section>
 
